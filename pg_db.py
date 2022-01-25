@@ -800,3 +800,84 @@ def contract_load(cash_df):
             cursor.close()
             connection.close()
             print('PostgreSQL connection is closed')                          
+            
+            
+            
+            
+def nhl_playerid_xwalk(szn):
+    
+    #delete all x-walk items for the season param
+    pid_truncate = """delete from nhl_game_stats.playerid_xwalk
+    where season = '%s'
+    """%(szn)
+        
+    # add players that match on name-team-season
+    pid_add_s = """
+    INSERT INTO nhl_game_stats.playerid_xwalk 
+    select pid.playerid, pid.playername as ep_playername
+    , t.team, ta.team as team_abbv
+    , chel_szn.playername as nhl_playername, chel_szn.team nhl_team
+    , t.season
+    from players.playerid pid
+    join teams.season_stats_s sss
+    	on sss.playerid = pid.playerid
+    join teams.teams t
+    	on sss.teamid = t.teamid
+    join nhl_game_stats.team_abbvs ta
+    	on t.team = ta.team_name
+    	and t.season = ta.season
+    join 
+    	( 
+    		select playername, team, season
+    		, count(game_date) gp, max(game_date)
+    			from nhl_game_stats.skaters 
+    			where season = '%s'
+    			group by playername, team, season
+    	) chel_szn
+    	on pid.playername = chel_szn.playername
+    	and t.season = chel_szn.season
+    	and ta.team = chel_szn.team
+    where t.league = 'NHL' and t.season = '%s'
+    order by t.team, chel_szn.team
+    """%(szn,szn)
+    
+    # add goalies that match on name-team-season
+    pid_add_g = """
+    INSERT INTO nhl_game_stats.playerid_xwalk 
+    select pid.playerid, pid.playername as ep_playername
+    , t.team, ta.team as team_abbv
+    , chel_szn.playername as nhl_playername, chel_szn.team nhl_team
+    , t.season
+    from players.playerid pid
+    join teams.season_stats_g ssg
+    	on ssg.playerid = pid.playerid
+    join teams.teams t
+    	on ssg.teamid = t.teamid
+    join nhl_game_stats.team_abbvs ta
+    	on t.team = ta.team_name
+    	and t.season = ta.season
+    join 
+    	( 
+    		select playername, team, season
+    		, count(game_date) gp, max(game_date)
+    			from nhl_game_stats.goalies 
+    			where season = '%s'
+    			group by playername, team, season
+    	) chel_szn
+    	on pid.playername = chel_szn.playername
+    	and t.season = chel_szn.season
+    	and ta.team = chel_szn.team
+    where t.league = 'NHL' and t.season = '%s'
+    order by t.team, chel_szn.team
+    """%(szn,szn)
+
+
+    # Load Manual file that matches players with different spellings        
+    pid_supp = pd.read_excel('/Users/jdifrisco/Desktop/PuckNight/playerid_xwalk_supp.xlsx')
+    
+    pid_supp = pid_supp[pid_supp.nhl_playername.notnull()]
+    insert_rows = pid_supp[pid_supp['season']==szn]
+    
+    pg_db.df_to_csv(insert_rows)    
+                
+            

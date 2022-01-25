@@ -46,7 +46,7 @@ from selenium.common.exceptions import TimeoutException
 ##      https://chromedriver.chromium.org/downloads  - find the appropriate driver version
 ##      Move Unzipped ChromeDriver to Applications - '/Applications/Chromedriver'
 
-# CURRENT: ChromeDriver 96.0.4664.45 - 12/14/21
+# CURRENT: ChromeDriver 97.0.4692.71 - 1/11/22
 
 # from webdriver_manager.chrome import ChromeDriverManager
 # driver =  webdriver.Chrome(ChromeDriverManager(version='95.0.4638.17').install())
@@ -709,9 +709,9 @@ def nhl_daily_stats_misc(start_date, end_date=None, season = '2021-22', game_typ
             giveaways = stat_line[12] 
             takeaways = stat_line[14] 
             first_goal = stat_line[16]
-            otg = stat_line[18] 
-            eng = stat_line[19] 
-            ena = stat_line[20] 
+            otg = stat_line[17] 
+            eng = stat_line[18] 
+            ena = stat_line[19] 
             shots_missed = stat_line[21] 
             shots_missed_wide = stat_line[22]
             shots_missed_over = stat_line[23]

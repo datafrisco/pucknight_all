@@ -20,11 +20,14 @@ import pandas as pd
 def player_info(pid):
     info_q = """
     select pid.playername, pi.height, pi.weight, pi.shoots_catches
-        , pi.drafted, pi.position
+        , pi.position
+        , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team
         , pi.nation, pi.dob, pi.place_of_birth, pi.youth_team, pi.playerid
     from players.info pi
     join players.playerid pid
     	on pi.playerid = pid.playerid
+    left join players."v_NHL_draft" vd
+        on pi.playerid = vd.playerid
     where pi.playerid = '%s'
         """%(pid)
         
@@ -37,11 +40,14 @@ def player_career(pid):
     , css.post_gp, css.post_g post_g_gaa, css.post_tp post_tp_svpct
     , css.captain
 	, t.team, t.league, t.season
-	, st.postseason
-    , case when t.season is null then null
-    	else age(cast(concat(left(t.season, 4),'-12-15') as date), pi.dob)/365 
-    	end as szn_age
-	, pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.drafted, pi.position, pi.height, pi.weight
+	, st.postseason         
+    , case when (pi.dob is null or t.season is null) then null else
+    round(cast(((DATE_PART('year', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('year', pi.dob::date))*12
+    	+ (DATE_PART('month', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('month', pi.dob::date)))/12 as numeric)
+    		, 2) 
+    		end as szn_age		
+    , pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight
+    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team    
     , pid.playerid, t.org_id, css.teamid
     from players.career_stats_s css
     join players.playerid pid
@@ -56,6 +62,8 @@ def player_career(pid):
         on css.playerid = aw.playerid
         and t.season = aw.season
         and t.league = aw.league
+    left join players."v_NHL_draft" vd
+        on pi.playerid = vd.playerid
     where pid.playerid = '%s'
     
     UNION
@@ -65,10 +73,13 @@ def player_career(pid):
     , csg.captain
 	, t.team, t.league, t.season
 	, st.postseason
-    , case when t.season is null then null
-    	else age(cast(concat(left(t.season, 4),'-12-15') as date), pi.dob)/365 
-    	end as szn_age
-    , pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.drafted, pi.position, pi.height, pi.weight 
+    , case when (pi.dob is null or t.season is null) then null else
+    round(cast(((DATE_PART('year', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('year', pi.dob::date))*12
+    	+ (DATE_PART('month', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('month', pi.dob::date)))/12 as numeric)
+    		, 2) 
+    		end as szn_age	
+	, pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight 
+    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team
     , pid.playerid, t.org_id, csg.teamid 
     from players.career_stats_g csg
     join players.playerid pid
@@ -83,6 +94,8 @@ def player_career(pid):
         on csg.playerid = aw.playerid
         and t.season = aw.season
         and t.league = aw.league
+    left join players."v_NHL_draft" vd
+        on pi.playerid = vd.playerid        
     where pid.playerid = '%s'
 	
 	order by season asc
@@ -175,9 +188,9 @@ def league_scoring(lg, szn):
         , pi.nation, pi.place_of_birth
         , round(cast(EXTRACT(year from age(cast(concat(left(t.season, 4),'-12-15') as date), pi.dob)) +  
 		  EXTRACT(month from age(cast(concat(left(t.season, 4),'-12-15') as date), pi.dob))/12 as numeric),1) age_curr
-        , pi.dob, pi.shoots_catches, pi.drafted, pi.height, pi.weight, pi.contract, pid.playerid
-        , ss.goals team_goals, ss.goals_against team_ga, ss.goal_diff team_goal_diff, ss.division, ss.div_pos
-        
+        , pi.dob, pi.shoots_catches, pi.height, pi.weight, pi.contract, pid.playerid
+        , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team        
+        , ss.goals team_goals, ss.goals_against team_ga, ss.goal_diff team_goal_diff, ss.division, ss.div_pos        
         from teams.season_stats_s sss
         join teams.teams t
         	on sss.teamid = t.teamid
@@ -187,6 +200,8 @@ def league_scoring(lg, szn):
         	on sss.playerid = pid.playerid
         join players.info pi
         	on pid.playerid = pi.playerid
+        left join players."v_NHL_draft" vd
+            on pi.playerid = vd.playerid             
         where t.league = '%s' and t.season = '%s'
         order by sss.tp desc  """ %(lg, szn)
     
@@ -204,7 +219,8 @@ def league_goalies(lg, szn):
         , pi.nation, pi.place_of_birth
         , round(cast(EXTRACT(year from age(cast(concat(left(t.season, 4),'-10-15') as date), pi.dob)) +  
 		  EXTRACT(month from age(cast(concat(left(t.season, 4),'-10-15') as date), pi.dob))/12 as numeric),1) age_curr
-        , pi.dob, pi.shoots_catches, pi.drafted, pi.height, pi.weight, pi.contract, pid.playerid
+        , pi.dob, pi.shoots_catches, pi.height, pi.weight, pi.contract, pid.playerid
+        , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team                
         , ss.goals team_goals, ss.goals_against team_ga, ss.goal_diff team_goal_diff, ss.division, ss.div_pos
         
         from teams.season_stats_g ssg
@@ -216,6 +232,8 @@ def league_goalies(lg, szn):
         	on ssg.playerid = pid.playerid
         join players.info pi
         	on pid.playerid = pi.playerid
+        left join players."v_NHL_draft" vd
+            on pi.playerid = vd.playerid                         
         where t.league = '%s' and t.season = '%s'
         order by ssg.sv_prc""" %(lg, szn)
     
@@ -232,7 +250,8 @@ def roster(tm, lg, szn):
     , round(cast(date_part('year',current_date) - date_part('year',pi.dob) as numeric)
     + cast(date_part('day',current_date) - date_part('day',pi.dob) as numeric)/365 ,2)
     as age
-    , pi.place_of_birth, pi.drafted, pi.height, pi.weight, pi.playerid
+    , pi.place_of_birth, pi.height, pi.weight, pi.playerid
+    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team                
     from teams.season_stats_s sss
     join teams.teams t
     	on sss.teamid = t.teamid
@@ -242,6 +261,8 @@ def roster(tm, lg, szn):
     	on sss.playerid = pid.playerid
     left join players.info pi
     	on pid.playerid = pi.playerid
+    left join players."v_NHL_draft" vd
+        on pi.playerid = vd.playerid        
     where t.team = '%s'
     	and t.league = '%s'
     	and t.season = '%s'
@@ -254,7 +275,8 @@ def roster(tm, lg, szn):
     , round(cast(date_part('year',current_date) - date_part('year',pi.dob) as numeric)
     + cast(date_part('day',current_date) - date_part('day',pi.dob) as numeric)/365 ,2)
     as age
-    , pi.place_of_birth, pi.drafted, pi.height, pi.weight, pi.playerid
+    , pi.place_of_birth, pi.height, pi.weight, pi.playerid
+    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team                
     from teams.season_stats_g ssg
     join teams.teams t
     	on ssg.teamid = t.teamid
@@ -264,6 +286,8 @@ def roster(tm, lg, szn):
     	on ssg.playerid = pid.playerid
     left join players.info pi
     	on pid.playerid = pi.playerid
+    left join players."v_NHL_draft" vd
+        on pi.playerid = vd.playerid        
     where t.team = '%s'
     	and t.league = '%s'
     	and t.season = '%s'
@@ -273,6 +297,31 @@ def roster(tm, lg, szn):
     
     return r_df
         
+
+def awards(pid):
+    all_awards = pd.DataFrame()
+    awards_q = """ select * 
+    from teams.award_winners aw    
+    where playerid = '%s'    
+    """%(pid)
+    p_aw = pd.read_sql_query(awards_q, con=pg_db.engine)
+    all_awards = pd.concat([all_awards, p_aw])
+        
+    return(all_awards)
+
+def award_winners(aw):
+    all_awards = pd.DataFrame()
+    awards_q = """ select pid.playername, aw.* 
+    from teams.award_winners aw
+    join players.playerid pid
+        on aw.playerid = pid.playerid    
+    where award = '%s'
+    """%(aw)
+    p_aw = pd.read_sql_query(awards_q, con=pg_db.engine)
+    all_awards = pd.concat([all_awards, p_aw])
+        
+    return(all_awards)
+
     
     
 def control_lookback(where_order):
@@ -364,11 +413,11 @@ def game_results_by_date(season, game_date):
     return(gms)
 
 
-def skater_score_by_date(season, game_date):    
+def skater_score_by_date(game_date):    
     
     skater_score = """select 
     pid_xwalk.playerid, s.playername, s.game_date, s.team, s.opponent,
-    s.pos as position,	
+    s.pos as position, s.season, s.game_type,
 	
 max (
 		(cast(extract(hour from toi.ev_toi) + extract(minute from toi.ev_toi/60) as numeric) )*0.1 + 
@@ -673,12 +722,12 @@ from nhl_game_stats.skaters s
     left join nhl_game_stats.playerid_xwalk pid_xwalk
         on s.playername = pid_xwalk.nhl_playername   
         and s.team = pid_xwalk.nhl_team
-    where s.season = '%s'
-    and s.game_date >= '%s'
+        and s.season = pid_xwalk.season
+    where s.game_date >= '%s'
     group by pid_xwalk.playerid, 
-    s.playername, s.game_date, s.team, s.opponent, s.pos
+    s.playername, s.game_date, s.team, s.opponent, s.pos, s.season, s.game_type
     order by skater_score desc, game_date desc	
-    """%(season, game_date)
+    """%(game_date)
     
     fantasy_s = pd.read_sql_query(skater_score, con=pg_db.engine)
 
@@ -694,6 +743,8 @@ def goalie_score_by_date(season, game_date):
  , g.team
  , g.opponent
  , g.position 
+ , g.season 
+ , g.game_type
  
 , sum(
 	g.wins*5 + g.ot_losses*2 + g.sv_pct*10 + g.shots_against*0.1 + 
@@ -717,9 +768,12 @@ def goalie_score_by_date(season, game_date):
 
 from nhl_game_stats.goalies g
 left join nhl_game_stats.playerid_xwalk pid_xwalk
-        on g.playername = pid_xwalk.nhl_playername      
+        on g.playername = pid_xwalk.nhl_playername   
+        and g.team = pid_xwalk.nhl_team
+        and g.season = pid_xwalk.season
 where g.game_date >= '%s' 
-group by g.playername, g.game_date, g.team, g.opponent, g.position 
+group by pid_xwalk.playerid, g.playername, g.game_date
+    , g.team, g.opponent, g.position, g.season, g.game_type
     """%(game_date)
     
     fantasy_g = pd.read_sql_query(goalie_score, con=pg_db.engine)
