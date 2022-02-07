@@ -39,6 +39,13 @@ connect_creds = psycopg2.connect(user='postgres',
                               database = 'pucknight')
     
 
+def age(d1, d2):
+    d1 = datetime.strptime(d1, "%Y-%m-%d")
+    d2 = datetime.strptime(d2, "%Y-%m-%d")
+    return round(abs((d2 - d1).days/365),1)
+
+
+
 def df_to_csv(df):
     """
     Creates a CSV out of the df. 

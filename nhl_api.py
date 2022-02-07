@@ -318,25 +318,37 @@ def player_info(pid):
     playername = page['people'][0]['fullName']
     first_name = page['people'][0]['firstName']
     last_name = page['people'][0]['lastName']
-    if 'primaryNumber' in list(page['people'][0].keys()):
+    try:
         primary_nbr = page['people'][0]['primaryNumber']    
-    else:
+    except:
         primary_nbr = -1        
-    dob = page['people'][0]['birthDate']
-    birth_city = page['people'][0]['birthCity']
-    if 'birthStateProvince' in list(page['people'][0].keys()):
+    try:
+        dob = page['people'][0]['birthDate']
+    except:
+        dob = '1/1/1900'
+    try:
+        birth_city = page['people'][0]['birthCity']
+    except:
+        birth_city = ''
+    try:
         birth_state = page['people'][0]['birthStateProvince']
-    else:
+    except:
         birth_state = ''                    
-    birth_country = page['people'][0]['birthCountry']
-    nation = page['people'][0]['nationality']
-    if 'height' in list(page['people'][0].keys()):
+    try:
+        birth_country = page['people'][0]['birthCountry']
+    except:
+        birth_country = ''
+    try: 
+        nation = page['people'][0]['nationality']
+    except:
+        nation = ''
+    try:
         height = page['people'][0]['height']
-    else:
+    except:
         height = ''
-    if 'weight' in list(page['people'][0].keys()):
+    try:
         weight = page['people'][0]['weight']
-    else:
+    except:
         weight = -1
     pos_code = page['people'][0]['primaryPosition']['code']
     position = page['people'][0]['primaryPosition']['name']
@@ -486,7 +498,6 @@ def dimPlayType():
   ### GAMES ###
 ##################
 
-## DOESN'T WORK
 def game_ids(season):
     # season is the year of season-start eg. '2021'
     game_id_dict = {}
@@ -555,10 +566,69 @@ def game_ids(season):
     game_id_dict[season+gt] = game_id_list
     print('Playoff  Games found for ' + season + ' through ' + game_id)
     
-
     return(game_id_dict)
     
+#####
 
+def game_id_db(gid_dict):    
+    for k, v in gid_dict.items():
+        check_in = '('
+        for gid in v: 
+            check_in += str(gid) + ", "
+        check_in = check_in[:-3]
+        check_in += ')'
+    
+        szn = str(k)[:4]
+        gt = str(k)[4:7]
+        
+        szn_yr = szn+'-'+str(int(szn)+1)[-2:]
+        
+        if gt == '01':
+            game_type = 'Preseason'
+        elif gt == '02':
+            game_type = 'Regular Season'
+        elif gt == '03':
+            game_type = 'Playoffs'    
+            
+        game_id_df = pd.DataFrame()
+        for gid in v:
+            game_id = gid
+            id_row = pd.DataFrame([[szn_yr,game_type,game_id]],
+                                  columns = ['season','game_type','game_id'])
+            game_id_df = pd.concat([game_id_df, id_row])    
+    
+        gid_del = """ delete from nhl_api.game_ids
+        where game_id in %s
+        """%(check_in)
+    
+        connection = psycopg2.connect(user='postgres',
+                                    password='654yam',
+                                    host = '127.0.0.1',
+                                    port = '5432',
+                                    database = 'pucknight')
+        cursor = connection.cursor()       
+       
+        pg_db.df_to_csv(game_id_df)
+        game_id_load =  """copy nhl_api.game_ids
+        FROM '/users/jdifrisco/desktop/pucknight/py_to_pg/file_load_x.csv' 
+          DELIMITER '|' 
+          CSV HEADER 
+          QUOTE '\"' 
+          ESCAPE '''';
+          """
+        try:       
+            cursor.execute(gid_del)
+            cursor.execute(game_id_load)
+            connection.commit()        
+            print("Game IDs loaded successfully in PostgreSQL ")
+        except(Exception,Error) as error:
+            print('Error while connecting to PostgreSQL',error)    
+        finally:
+            if (connection):
+                cursor.close()
+                connection.close()
+                print('PostgreSQL connection is closed')   
+           
 
 ##################
 ### FEED/LIVE ####
@@ -684,12 +754,11 @@ def game_livefeed_db(game_info, officials_df, event_df, plr_df):
     
     #game_info
     game_id = game_info.game_id.iloc[0]
-    status = game_info.game_status.iloc[0]
+    # status = game_info.game_status.iloc[0]
 
     game_del_q = '''delete from nhl_api.game_info
                     where game_id = %s
-                    and game_status = '%s'
-                    '''%(game_id, status)
+                    '''%(game_id)
     ########
     # LOAD THE CSV
     connection = psycopg2.connect(user='postgres',
@@ -722,8 +791,7 @@ def game_livefeed_db(game_info, officials_df, event_df, plr_df):
             connection.close()
             print('PostgreSQL connection is closed')  
 
-    #official
-    game_id = officials_df.game_id.iloc[0]
+    #OFFICIALS
     game_del_q = '''delete from nhl_api.game_officials
                     where game_id = %s
                     '''%(game_id)
@@ -759,10 +827,8 @@ def game_livefeed_db(game_info, officials_df, event_df, plr_df):
             connection.close()
             print('PostgreSQL connection is closed')  
 
-
     
-    #events
-    game_id = event_df.game_id.iloc[0]
+    #EVENTS
     game_del_q = '''delete from nhl_api.game_events
                     where game_id = %s
                     '''%(game_id)
@@ -798,8 +864,7 @@ def game_livefeed_db(game_info, officials_df, event_df, plr_df):
             connection.close()
             print('PostgreSQL connection is closed')  
             
-    #player_events
-    game_id = plr_df.game_id.iloc[0]
+    #PLAYER_EVENTS
     game_del_q = '''delete from nhl_api.player_events
                     where game_id = %s
                     '''%(game_id)
@@ -1357,10 +1422,10 @@ def boxscore_db(game_lineup_df, skater_lines, goalie_lines, coach_df):
 #####################
 #####################
 
-def game_shifts(game_id):
+def gameShifts(game_id):
     
     ### SHIFTS
-    shift_api_end = 'https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId='+game_id
+    shift_api_end = 'https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId='+str(game_id)
     response = requests.get(shift_api_end, params={'format':'json'}) 
     page = response.json() #two item dict
     
@@ -1388,18 +1453,18 @@ def game_shifts(game_id):
                                             'team_id','period','shift_num','start_time',
                                             'end_time','duration','type_code','event_id',
                                             'event_details','event_description'])
-    
         shift_df = pd.concat([shift_df, shift_row])
-
 
     return(shift_df)
 
-def game_shifts_db(game_shifts):
+
+
+def gameShifts_db(game_shifts):
     
     #game_info
     game_id = game_shifts.game_id.iloc[0]
 
-    game_del_q = '''delete from nhl_api.game_info
+    game_del_q = '''delete from nhl_api.game_shifts
                     where game_id = %s
                     '''%(game_id)
     ########
@@ -1433,3 +1498,49 @@ def game_shifts_db(game_shifts):
             cursor.close()
             connection.close()
             print('PostgreSQL connection is closed')  
+            
+            
+######################
+######################
+######################
+
+def games_refresh(game_id_list):
+    for gid in game_id_list:
+        try: 
+            game_info, officials_df, event_df, plr_df \
+                = gameLiveFeed(str(gid))        
+            game_livefeed_db(game_info, officials_df
+                                      ,event_df, plr_df)        
+        except:
+            print('No Game Info: '+str(gid))
+            pass
+            
+        try:
+            game_lineup_df, skater_lines, goalie_lines, coach_df \
+                = gameBoxscore(str(gid))
+            boxscore_db(game_lineup_df, skater_lines,
+                                goalie_lines, coach_df)        
+        ######                
+            try: 
+                game_decisions = gameDecisions(str(gid))
+                decisions_db(game_decisions)
+            except:
+                print("Game in Progress: "+str(gid))       
+                pass
+        except:
+            print("Lineups Or Stat Lines Not Available for: "+str(gid))   
+            pass
+
+        try:
+            game_shifts = gameShifts(str(gid))
+            gameShifts_db(game_shifts)
+        except:
+            print("No Game Shift Data for: "+str(gid))
+            pass
+            
+        print("all stats run for: "+str(gid))
+        
+    
+
+            
+        
