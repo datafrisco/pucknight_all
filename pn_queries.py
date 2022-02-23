@@ -46,8 +46,9 @@ def player_career(pid):
     	+ (DATE_PART('month', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('month', pi.dob::date)))/12 as numeric)
     		, 2) 
     		end as szn_age		
-    , pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight
-    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team    
+    , pid.playername
+    --, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight
+    --, vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team    
     , pid.playerid, t.org_id, css.teamid
     from players.career_stats_s css
     join players.playerid pid
@@ -63,7 +64,7 @@ def player_career(pid):
         and t.season = aw.season
         and t.league = aw.league
     left join players."v_NHL_draft" vd
-        on pi.playerid = vd.playerid
+        on pid.playerid = vd.playerid
     where pid.playerid = '%s'
     
     UNION
@@ -78,8 +79,9 @@ def player_career(pid):
     	+ (DATE_PART('month', concat(left(t.season, 4),'-12-15')::date) - DATE_PART('month', pi.dob::date)))/12 as numeric)
     		, 2) 
     		end as szn_age	
-	, pid.playername, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight 
-    , vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team
+	, pid.playername
+    --, pi.nation, pi.place_of_birth, pi.dob, pi.position, pi.height, pi.weight 
+    --, vd.draft_year, vd.draft_round, vd.overall_pick, vd.team as draft_team
     , pid.playerid, t.org_id, csg.teamid 
     from players.career_stats_g csg
     join players.playerid pid
@@ -95,7 +97,7 @@ def player_career(pid):
         and t.season = aw.season
         and t.league = aw.league
     left join players."v_NHL_draft" vd
-        on pi.playerid = vd.playerid        
+        on pid.playerid = vd.playerid        
     where pid.playerid = '%s'
 	
 	order by season asc
@@ -165,7 +167,7 @@ def league_standings(lg, szn='2021-22'):
     sq = """
     select ss.div_pos, ss.gp, ss.points, ss.ppg, t.team, ss.wins, ss.otw, ss.losses, ss.otl
     , ss.goals, ss.goals_against, ss.goal_diff
-    , ss.division, ss.postseason, ss.league
+    , ss.division, ss.postseason, ss.league, ss.teamid
     from teams.season_standings ss
     join teams.teams t
     	on ss.teamid = t.teamid
@@ -415,276 +417,277 @@ def game_results_by_date(season, game_date):
 
 def skater_score_by_date(game_date):    
     
-    skater_score = """select 
-    pid_xwalk.playerid, s.playername, s.game_date, s.team, s.opponent,
-    s.pos as position, s.season, s.game_type,
-	
-max (
-		(cast(extract(hour from toi.ev_toi) + extract(minute from toi.ev_toi/60) as numeric) )*0.1 + 
-		(cast(extract(hour from toi.sh_toi) + extract(minute from toi.sh_toi/60) as numeric) )*0.2 + 
-		(cast(extract(hour from toi.pp_toi) + extract(minute from toi.pp_toi/60)  as numeric) )*0.075 + 
-		(pp.pp_toi_pct*100)*0.0001 + 
-		(cast(extract(hour from toi.ot_toi) + extract(minute from toi.ot_toi/60) as numeric) )*0.2 + 
-		(cast(extract(hour from s.toi) + extract(minute from s.toi/60) as numeric) )*0 + 
-		(toi.shifts)*0 + 
-		(s.shots)*3 + 
-		(misc.shots_missed_post)*2 + 
-		(misc.shots_missed_crossbar)*2 + 
-		COALESCE((st.s_slap), 0)*1 + 
-		COALESCE((shootout.shootout_attempts), 0)*1 + 
-		(misc.shots_missed_wide)*1 + 
-		(misc.shots_missed_over)*1 + 
-		COALESCE((st.s_def), 0)*0 + 
-		COALESCE((st.s_wrist), 0)*0 + 
-		COALESCE((st.s_snap), 0)*0 + 
-		COALESCE((st.s_back), 0)*0 + 
-		COALESCE((st.s_tip), 0)*0 + 
-		COALESCE((st.s_wrap), 0)*0 + 
-		(pp.pp_shots)*0.5 + 
-		(misc.shots_missed)*0 + 
-		(sat.sat_relative)*0.1 + 
-		(sat.sat_net)*0.3 + 
-		(sat.usat_relative)*0.1 + 
-		(sat.sat_ahead)*0 + 
-		(sat.usat_ahead)*0 + 
-		(sat.sat_for)*0 + 
-		(sat.usat_for)*0 + 
-		(sat.sat_against)*0 + 
-		(sat.usat_against)*0 + 
-		(sat.sat_behind)*0 + 
-		(sat.usat_behind)*0 + 
-		(sat.sat_close)*0 + 
-		(sat.usat_close)*0 + 
-		COALESCE((pp.pp_isat_for), 0)*0 + 
-		(sat.usat_net)*0.5 + 
-		(pen.penalties_drawn)*2 + 
-		(pen.pim)*0 + 
-		(pen.penalties_taken)*0 + 
-		(pen.major_penalties)*0 + 
-		(pen.minor_penalties)*-2 + 
-		(pen.misconduct)*-5 + 
-		(pen.game_misconduct)*-10 + 
-		(misc.hits)*1 + 
-		(s.plus_minus)*2 + 
-		(misc.blocked_shots)*2 + 
-		(misc.takeaways)*2 + 
-		(misc.giveaways)*-2 + 
-		(s.evg)*10 + 
-		(s.gwg)*3 + 
-		(s.shg)*13 + 
-		(s.ppg)*8 + 
-		(misc.otg)*3 + 
-		COALESCE((shootout.shootout_goals), 0)*2 + 
-		COALESCE((st.g_wrap), 0)*2 + 
-		COALESCE((misc.first_goal), 0)*1 + 
-		COALESCE((st.g_slap), 0)*1 + 
-		COALESCE((shootout.game_deciding_goal), 0)*1 + 
-		(misc.eng)*0 + 
-		COALESCE((st.g_wrist), 0)*0 + 
-		COALESCE((st.g_snap), 0)*0 + 
-		COALESCE((st.g_back), 0)*0 + 
-		COALESCE((st.g_tip), 0)*0 + 
-		COALESCE((st.g_def), 0)*0 + 
-		COALESCE((fo.faceoffs), 0)*0 + 
-		COALESCE((fo.faceoffs_won), 0)*0.5 + 
-		COALESCE((fo.dz_fow), 0)*0.1 + 
-		COALESCE((fo.dz_faceoffs), 0)*0 + 
-		COALESCE((fo.pp_faceoffs), 0)*0 + 
-		COALESCE((fo.oz_fow), 0)*0.1 + 
-		COALESCE((fo.pp_fow), 0)*0.1 + 
-		COALESCE((fo.sh_faceoffs), 0)*0 + 
-		COALESCE((fo.sh_fow), 0)*0.1 + 
-		COALESCE((fo.faceoff_win_pct), 0)*0 + 
-		COALESCE((fo.ev_faceoffs), 0)*0 + 
-		COALESCE((fo.ev_fow), 0)*0 + 
-		COALESCE((fo.ev_fol), 0)*-0.1 + 
-		COALESCE((fo.nz_faceoffs), 0)*0 + 
-		COALESCE((fo.nz_fow), 0)*0 + 
-		COALESCE((fo.nz_fol), 0)*-0.1 + 
-		COALESCE((fo.oz_faceoffs), 0)*0 + 
-		COALESCE((fo.sh_fol), 0)*-0.1 + 
-		COALESCE((fo.oz_fol), 0)*-0.1 + 
-		COALESCE((fo.pp_fol), 0)*-0.1 + 
-		COALESCE((fo.dz_fol), 0)*-0.1 + 
-		COALESCE((fo.faceoffs_lost), 0)*0.5 + 
-		(s.shp - s.shg)*9 + 
-		(s.assists - (s.ppp-s.ppg) - (s.shp - s.shg))*7 + 
-		(pp.ppa1)*6 + 
-		(pp.ppa2)*5 + 
-		(misc.ena)*0   
-	) as skater_score,
-
-max(
-		(cast(extract(hour from toi.ev_toi) + extract(minute from toi.ev_toi/60) as numeric) )*0.1 + 
-		(cast(extract(hour from toi.sh_toi) + extract(minute from toi.sh_toi/60) as numeric) )*0.2 + 
-		(cast(extract(hour from toi.pp_toi) + extract(minute from toi.pp_toi/60)  as numeric) )*0.075 + 
-		(pp.pp_toi_pct*100)*0.0001 + 
-		(cast(extract(hour from toi.ot_toi) + extract(minute from toi.ot_toi/60) as numeric) )*0.2 + 
-		(cast(extract(hour from s.toi) + extract(minute from s.toi/60) as numeric) )*0 + 
-		(toi.shifts)*0 
-	) as toi_pts, 
-	
-max(
-		(s.shots)*3 + 
-		(misc.shots_missed_post)*2 + 
-		(misc.shots_missed_crossbar)*2 + 
-		COALESCE((st.s_slap), 0)*1 + 
-		COALESCE((shootout.shootout_attempts), 0)*1 + 
-		(misc.shots_missed_wide)*1 + 
-		(misc.shots_missed_over)*1 + 
-		COALESCE((st.s_def), 0)*0 + 
-		COALESCE((st.s_wrist), 0)*0 + 
-		COALESCE((st.s_snap), 0)*0 + 
-		COALESCE((st.s_back), 0)*0 + 
-		COALESCE((st.s_tip), 0)*0 + 
-		COALESCE((st.s_wrap), 0)*0 + 
-		(pp.pp_shots)*0.5 + 
-		(misc.shots_missed)*0
-) as shot_points, 
-
-max(
-		(sat.sat_relative)*0.1 + 
-		(sat.sat_net)*0.3 + 
-		(sat.usat_relative)*0.1 + 
-		(sat.sat_ahead)*0 + 
-		(sat.usat_ahead)*0 + 
-		(sat.sat_for)*0 + 
-		(sat.usat_for)*0 + 
-		(sat.sat_against)*0 + 
-		(sat.usat_against)*0 + 
-		(sat.sat_behind)*0 + 
-		(sat.usat_behind)*0 + 
-		(sat.sat_close)*0 + 
-		(sat.usat_close)*0 + 
-		COALESCE((pp.pp_isat_for), 0)*0 + 
-		(sat.usat_net)*0.5
-) as sat_points, 
-
-max(
-		(s.evg)*10 + 
-		(s.gwg)*3 + 
-		(s.shg)*13 + 
-		(s.ppg)*8 + 
-		(misc.otg)*3 + 
-		COALESCE((shootout.shootout_goals), 0)*2 + 
-		COALESCE((st.g_wrap), 0)*2 + 
-		COALESCE((misc.first_goal), 0)*1 + 
-		COALESCE((st.g_slap), 0)*1 + 
-		COALESCE((shootout.game_deciding_goal), 0)*1 + 
-		(misc.eng)*0 + 
-		COALESCE((st.g_wrist), 0)*0 + 
-		COALESCE((st.g_snap), 0)*0 + 
-		COALESCE((st.g_back), 0)*0 + 
-		COALESCE((st.g_tip), 0)*0 + 
-		COALESCE((st.g_def), 0)*0
-) as goal_points, 
-
-max(
-		COALESCE((fo.faceoffs), 0)*0 + 
-		COALESCE((fo.faceoffs_won), 0)*0.5 + 
-		COALESCE((fo.dz_fow), 0)*0.1 + 
-		COALESCE((fo.dz_faceoffs), 0)*0 + 
-		COALESCE((fo.pp_faceoffs), 0)*0 + 
-		COALESCE((fo.oz_fow), 0)*0.1 + 
-		COALESCE((fo.pp_fow), 0)*0.1 + 
-		COALESCE((fo.sh_faceoffs), 0)*0 + 
-		COALESCE((fo.sh_fow), 0)*0.1 + 
-		COALESCE((fo.faceoff_win_pct), 0)*0 + 
-		COALESCE((fo.ev_faceoffs), 0)*0 + 
-		COALESCE((fo.ev_fow), 0)*0 + 
-		COALESCE((fo.ev_fol), 0)*-0.1 + 
-		COALESCE((fo.nz_faceoffs), 0)*0 + 
-		COALESCE((fo.nz_fow), 0)*0 + 
-		COALESCE((fo.nz_fol), 0)*-0.1 + 
-		COALESCE((fo.oz_faceoffs), 0)*0 + 
-		COALESCE((fo.sh_fol), 0)*-0.1 + 
-		COALESCE((fo.oz_fol), 0)*-0.1 + 
-		COALESCE((fo.pp_fol), 0)*-0.1 + 
-		COALESCE((fo.dz_fol), 0)*-0.1 + 
-		COALESCE((fo.faceoffs_lost), 0)*0.5
-) as fo_points,
-
-max(
-		(s.shp - s.shg)*9 + 
-		(s.assists - (s.ppp-s.ppg) - (s.shp - s.shg))*7 + 
-		(pp.ppa1)*6 + 
-		(pp.ppa2)*5 + 
-		(misc.ena)*0
-) as specTeams_points, 
-
---TOP LINE
-max(s.goals) goals,
-max(s.assists) assists,
-max(s.plus_minus) plus_minus, 
-max(pen.pim) pim , 
-max(extract(hour from toi.toi)) mins , 
-
---GOALS
-max(s.evg)  evg, 
-max(s.shg) shg , 
-max(s.ppg)  ppg, 
-max(s.gwg)  gwg,
-max(misc.otg) otg , 
-max(COALESCE((misc.first_goal), 0)) first_goal , 
-max(misc.eng) eng , 
-
---ASSISTS
-max((s.assists) - (s.ppp-s.ppg) - (s.shp - s.shg))  ev_a, 
-max(s.shp - s.shg) sh_a , 
-max(pp.ppa1 + pp.ppa2) pp_a, 
-
---SHOTS
-max(s.shots)  shots, 
-max(pp.pp_shots)  pp_shots, 
-max(sat.sat_relative) sat_relative , 
-max(sat.usat_net) usat_net , 
-max(sat.usat_relative) usat_relative , 
-max(sat.sat_net) sat_net , 
-max(misc.shots_missed) shots_missed, 
-max(misc.shots_missed_crossbar) shots_missed_crossbar, 
-max(misc.shots_missed_over) shots_missed_over, 
-max(misc.shots_missed_post) shots_missed_post, 
-max(misc.shots_missed_wide) shots_missed_wide, 
-max(COALESCE((shootout.shootout_attempts), 0)) shootout_attempts, 
-max(COALESCE((shootout.shootout_goals), 0)) shootout_goals, 
-
---OTHER
-max(misc.blocked_shots) blocked_shots , 
-max(misc.takeaways) takeaways, 
-max(pen.penalties_drawn) penalties_drawn , 
-max(misc.hits)  hits, 
-max(misc.giveaways) giveaways, 
-max(pen.misconduct) misconduct , 
-max(pen.game_misconduct) game_misconduct,
-
---TOI
-max(extract(hour from toi.ev_toi)) ev_mins , 
-max(extract(hour from toi.sh_toi))  sh_mins  , 
-max(extract(hour from toi.pp_toi))  pp_mins  , 
-max(extract(hour from toi.ot_toi))  ot_mins  , 
-max(pp.pp_toi_pct)  pp_toi_pct, 
-max(toi.shifts) shifts , 
-	
---Faceoffs
-max(COALESCE((fo.faceoffs), 0)) faceoffs , 
-max(COALESCE((fo.faceoffs_won), 0)) faceoffs_won , 
-max(COALESCE((fo.faceoffs_lost), 0)) faceoffs_lost , 
-max(COALESCE((fo.faceoff_win_pct), 0))  faceoff_win_pct, 
-
---Shot Type
-max(COALESCE((st.g_slap), 0))  g_slap, 
-max(COALESCE((st.g_wrap), 0)) g_wrap, 
-max(COALESCE((st.g_wrist), 0)) g_wrist , 
-max(COALESCE((st.g_snap), 0))  g_snap, 
-max(COALESCE((st.g_back), 0)) g_back, 
-max(COALESCE((st.g_tip), 0))  g_tip, 
-max(COALESCE((st.g_def), 0))  g_def, 
-max(COALESCE((st.s_def), 0)) s_def , 
-max(COALESCE((st.s_wrist), 0)) s_wrist , 
-max(COALESCE((st.s_snap), 0))  s_snap, 
-max(COALESCE((st.s_back), 0))  s_back, 
-max(COALESCE((st.s_tip), 0))  s_tip, 
-max(COALESCE((st.s_wrap), 0))  s_wrap 			
+    skater_score = """
+        select sr.nhl_playerid, sr.ep_playerid, 
+    	s.playername, s.game_date, s.team, s.opponent,
+        s.pos as position, s.season, s.game_type,
+    	
+    max (
+    		(cast(extract(hour from toi.ev_toi) + extract(minute from toi.ev_toi/60) as numeric) )*0.1 + 
+    		(cast(extract(hour from toi.sh_toi) + extract(minute from toi.sh_toi/60) as numeric) )*0.2 + 
+    		(cast(extract(hour from toi.pp_toi) + extract(minute from toi.pp_toi/60)  as numeric) )*0.075 + 
+    		(pp.pp_toi_pct*100)*0.0001 + 
+    		(cast(extract(hour from toi.ot_toi) + extract(minute from toi.ot_toi/60) as numeric) )*0.2 + 
+    		(cast(extract(hour from s.toi) + extract(minute from s.toi/60) as numeric) )*0 + 
+    		(toi.shifts)*0 + 
+    		(s.shots)*3 + 
+    		(misc.shots_missed_post)*2 + 
+    		(misc.shots_missed_crossbar)*2 + 
+    		COALESCE((st.s_slap), 0)*1 + 
+    		COALESCE((shootout.shootout_attempts), 0)*1 + 
+    		(misc.shots_missed_wide)*1 + 
+    		(misc.shots_missed_over)*1 + 
+    		COALESCE((st.s_def), 0)*0 + 
+    		COALESCE((st.s_wrist), 0)*0 + 
+    		COALESCE((st.s_snap), 0)*0 + 
+    		COALESCE((st.s_back), 0)*0 + 
+    		COALESCE((st.s_tip), 0)*0 + 
+    		COALESCE((st.s_wrap), 0)*0 + 
+    		(pp.pp_shots)*0.5 + 
+    		(misc.shots_missed)*0 + 
+    		(sat.sat_relative)*0.1 + 
+    		(sat.sat_net)*0.3 + 
+    		(sat.usat_relative)*0.1 + 
+    		(sat.sat_ahead)*0 + 
+    		(sat.usat_ahead)*0 + 
+    		(sat.sat_for)*0 + 
+    		(sat.usat_for)*0 + 
+    		(sat.sat_against)*0 + 
+    		(sat.usat_against)*0 + 
+    		(sat.sat_behind)*0 + 
+    		(sat.usat_behind)*0 + 
+    		(sat.sat_close)*0 + 
+    		(sat.usat_close)*0 + 
+    		COALESCE((pp.pp_isat_for), 0)*0 + 
+    		(sat.usat_net)*0.5 + 
+    		(pen.penalties_drawn)*2 + 
+    		(pen.pim)*0 + 
+    		(pen.penalties_taken)*0 + 
+    		(pen.major_penalties)*0 + 
+    		(pen.minor_penalties)*-2 + 
+    		(pen.misconduct)*-5 + 
+    		(pen.game_misconduct)*-10 + 
+    		(misc.hits)*1 + 
+    		(s.plus_minus)*2 + 
+    		(misc.blocked_shots)*2 + 
+    		(misc.takeaways)*2 + 
+    		(misc.giveaways)*-2 + 
+    		(s.evg)*10 + 
+    		(s.gwg)*3 + 
+    		(s.shg)*13 + 
+    		(s.ppg)*8 + 
+    		(misc.otg)*3 + 
+    		COALESCE((shootout.shootout_goals), 0)*2 + 
+    		COALESCE((st.g_wrap), 0)*2 + 
+    		COALESCE((misc.first_goal), 0)*1 + 
+    		COALESCE((st.g_slap), 0)*1 + 
+    		COALESCE((shootout.game_deciding_goal), 0)*1 + 
+    		(misc.eng)*0 + 
+    		COALESCE((st.g_wrist), 0)*0 + 
+    		COALESCE((st.g_snap), 0)*0 + 
+    		COALESCE((st.g_back), 0)*0 + 
+    		COALESCE((st.g_tip), 0)*0 + 
+    		COALESCE((st.g_def), 0)*0 + 
+    		COALESCE((fo.faceoffs), 0)*0 + 
+    		COALESCE((fo.faceoffs_won), 0)*0.5 + 
+    		COALESCE((fo.dz_fow), 0)*0 + 
+    		COALESCE((fo.dz_faceoffs), 0)*0 + 
+    		COALESCE((fo.pp_faceoffs), 0)*0 + 
+    		COALESCE((fo.oz_fow), 0)*0 + 
+    		COALESCE((fo.pp_fow), 0)*0 + 
+    		COALESCE((fo.sh_faceoffs), 0)*0 + 
+    		COALESCE((fo.sh_fow), 0)*0 + 
+    		(COALESCE((fo.faceoff_win_pct), 0)-50)*.2 + 
+    		COALESCE((fo.ev_faceoffs), 0)*0 + 
+    		COALESCE((fo.ev_fow), 0)*0 + 
+    		COALESCE((fo.ev_fol), 0)*-0 + 
+    		COALESCE((fo.nz_faceoffs), 0)*0 + 
+    		COALESCE((fo.nz_fow), 0)*0 + 
+    		COALESCE((fo.nz_fol), 0)*-0 + 
+    		COALESCE((fo.oz_faceoffs), 0)*0 + 
+    		COALESCE((fo.sh_fol), 0)*-0 + 
+    		COALESCE((fo.oz_fol), 0)*-0 + 
+    		COALESCE((fo.pp_fol), 0)*-0 + 
+    		COALESCE((fo.dz_fol), 0)*0 + 
+    		COALESCE((fo.faceoffs_lost), 0)*-0.3 + 
+    		(s.shp - s.shg)*9 + 
+    		(s.assists - (s.ppp-s.ppg) - (s.shp - s.shg))*7 + 
+    		(pp.ppa1)*6 + 
+    		(pp.ppa2)*5 + 
+    		(misc.ena)*0   
+    	) as skater_score,
+    
+    max(
+    		(cast(extract(hour from toi.ev_toi) + extract(minute from toi.ev_toi/60) as numeric) )*0.1 + 
+    		(cast(extract(hour from toi.sh_toi) + extract(minute from toi.sh_toi/60) as numeric) )*0.2 + 
+    		(cast(extract(hour from toi.pp_toi) + extract(minute from toi.pp_toi/60)  as numeric) )*0.075 + 
+    		(pp.pp_toi_pct*100)*0.0001 + 
+    		(cast(extract(hour from toi.ot_toi) + extract(minute from toi.ot_toi/60) as numeric) )*0.2 + 
+    		(cast(extract(hour from s.toi) + extract(minute from s.toi/60) as numeric) )*0 + 
+    		(toi.shifts)*0 
+    	) as toi_pts, 
+    	
+    max(
+    		(s.shots)*3 + 
+    		(misc.shots_missed_post)*2 + 
+    		(misc.shots_missed_crossbar)*2 + 
+    		COALESCE((st.s_slap), 0)*1 + 
+    		COALESCE((shootout.shootout_attempts), 0)*1 + 
+    		(misc.shots_missed_wide)*1 + 
+    		(misc.shots_missed_over)*1 + 
+    		COALESCE((st.s_def), 0)*0 + 
+    		COALESCE((st.s_wrist), 0)*0 + 
+    		COALESCE((st.s_snap), 0)*0 + 
+    		COALESCE((st.s_back), 0)*0 + 
+    		COALESCE((st.s_tip), 0)*0 + 
+    		COALESCE((st.s_wrap), 0)*0 + 
+    		(pp.pp_shots)*0.5 + 
+    		(misc.shots_missed)*0
+    ) as shot_points, 
+    
+    max(
+    		(sat.sat_relative)*0.1 + 
+    		(sat.sat_net)*0.3 + 
+    		(sat.usat_relative)*0.1 + 
+    		(sat.sat_ahead)*0 + 
+    		(sat.usat_ahead)*0 + 
+    		(sat.sat_for)*0 + 
+    		(sat.usat_for)*0 + 
+    		(sat.sat_against)*0 + 
+    		(sat.usat_against)*0 + 
+    		(sat.sat_behind)*0 + 
+    		(sat.usat_behind)*0 + 
+    		(sat.sat_close)*0 + 
+    		(sat.usat_close)*0 + 
+    		COALESCE((pp.pp_isat_for), 0)*0 + 
+    		(sat.usat_net)*0.5
+    ) as sat_points, 
+    
+    max(
+    		(s.evg)*10 + 
+    		(s.gwg)*3 + 
+    		(s.shg)*13 + 
+    		(s.ppg)*8 + 
+    		(misc.otg)*3 + 
+    		COALESCE((shootout.shootout_goals), 0)*2 + 
+    		COALESCE((st.g_wrap), 0)*2 + 
+    		COALESCE((misc.first_goal), 0)*1 + 
+    		COALESCE((st.g_slap), 0)*1 + 
+    		COALESCE((shootout.game_deciding_goal), 0)*1 + 
+    		(misc.eng)*0 + 
+    		COALESCE((st.g_wrist), 0)*0 + 
+    		COALESCE((st.g_snap), 0)*0 + 
+    		COALESCE((st.g_back), 0)*0 + 
+    		COALESCE((st.g_tip), 0)*0 + 
+    		COALESCE((st.g_def), 0)*0
+    ) as goal_points, 
+    
+    max(
+    		COALESCE((fo.faceoffs), 0)*0 + 
+    		COALESCE((fo.faceoffs_won), 0)*0.5 + 
+    		COALESCE((fo.dz_fow), 0)*0 + 
+    		COALESCE((fo.dz_faceoffs), 0)*0 + 
+    		COALESCE((fo.pp_faceoffs), 0)*0 + 
+    		COALESCE((fo.oz_fow), 0)*0 + 
+    		COALESCE((fo.pp_fow), 0)*0 + 
+    		COALESCE((fo.sh_faceoffs), 0)*0 + 
+    		COALESCE((fo.sh_fow), 0)*0 + 
+    		(COALESCE((fo.faceoff_win_pct), 0)-50)*0.2 + 
+    		COALESCE((fo.ev_faceoffs), 0)*0 + 
+    		COALESCE((fo.ev_fow), 0)*0 + 
+    		COALESCE((fo.ev_fol), 0)*-0 + 
+    		COALESCE((fo.nz_faceoffs), 0)*0 + 
+    		COALESCE((fo.nz_fow), 0)*0 + 
+    		COALESCE((fo.nz_fol), 0)*-0 + 
+    		COALESCE((fo.oz_faceoffs), 0)*0 + 
+    		COALESCE((fo.sh_fol), 0)*-0 + 
+    		COALESCE((fo.oz_fol), 0)*-0 + 
+    		COALESCE((fo.pp_fol), 0)*-0 + 
+    		COALESCE((fo.dz_fol), 0)*-0 + 
+    		COALESCE((fo.faceoffs_lost), 0)*-0.3
+    ) as fo_points,
+    
+    max(
+    		(s.shp - s.shg)*9 + 
+    		(s.assists - (s.ppp-s.ppg) - (s.shp - s.shg))*7 + 
+    		(pp.ppa1)*6 + 
+    		(pp.ppa2)*5 + 
+    		(misc.ena)*0
+    ) as specTeams_points, 
+    
+    --TOP LINE
+    max(s.goals) goals,
+    max(s.assists) assists,
+    max(s.plus_minus) plus_minus, 
+    max(pen.pim) pim , 
+    max(extract(hour from toi.toi)) mins , 
+    
+    --GOALS
+    max(s.evg)  evg, 
+    max(s.shg) shg , 
+    max(s.ppg)  ppg, 
+    max(s.gwg)  gwg,
+    max(misc.otg) otg , 
+    max(COALESCE((misc.first_goal), 0)) first_goal , 
+    max(misc.eng) eng , 
+    
+    --ASSISTS
+    max((s.assists) - (s.ppp-s.ppg) - (s.shp - s.shg))  ev_a, 
+    max(s.shp - s.shg) sh_a , 
+    max(pp.ppa1 + pp.ppa2) pp_a, 
+    
+    --SHOTS
+    max(s.shots)  shots, 
+    max(pp.pp_shots)  pp_shots, 
+    max(sat.sat_relative) sat_relative , 
+    max(sat.usat_net) usat_net , 
+    max(sat.usat_relative) usat_relative , 
+    max(sat.sat_net) sat_net , 
+    max(misc.shots_missed) shots_missed, 
+    max(misc.shots_missed_crossbar) shots_missed_crossbar, 
+    max(misc.shots_missed_over) shots_missed_over, 
+    max(misc.shots_missed_post) shots_missed_post, 
+    max(misc.shots_missed_wide) shots_missed_wide, 
+    max(COALESCE((shootout.shootout_attempts), 0)) shootout_attempts, 
+    max(COALESCE((shootout.shootout_goals), 0)) shootout_goals, 
+    
+    --OTHER
+    max(misc.blocked_shots) blocked_shots , 
+    max(misc.takeaways) takeaways, 
+    max(pen.penalties_drawn) penalties_drawn , 
+    max(misc.hits)  hits, 
+    max(misc.giveaways) giveaways, 
+    max(pen.misconduct) misconduct , 
+    max(pen.game_misconduct) game_misconduct,
+    
+    --TOI
+    max(extract(hour from toi.ev_toi)) ev_mins , 
+    max(extract(hour from toi.sh_toi))  sh_mins  , 
+    max(extract(hour from toi.pp_toi))  pp_mins  , 
+    max(extract(hour from toi.ot_toi))  ot_mins  , 
+    max(pp.pp_toi_pct)  pp_toi_pct, 
+    max(toi.shifts) shifts , 
+    	
+    --Faceoffs
+    max(COALESCE((fo.faceoffs), 0)) faceoffs , 
+    max(COALESCE((fo.faceoffs_won), 0)) faceoffs_won , 
+    max(COALESCE((fo.faceoffs_lost), 0)) faceoffs_lost , 
+    max(COALESCE((fo.faceoff_win_pct), 0))  faceoff_win_pct, 
+    
+    --Shot Type
+    max(COALESCE((st.g_slap), 0))  g_slap, 
+    max(COALESCE((st.g_wrap), 0)) g_wrap, 
+    max(COALESCE((st.g_wrist), 0)) g_wrist , 
+    max(COALESCE((st.g_snap), 0))  g_snap, 
+    max(COALESCE((st.g_back), 0)) g_back, 
+    max(COALESCE((st.g_tip), 0))  g_tip, 
+    max(COALESCE((st.g_def), 0))  g_def, 
+    max(COALESCE((st.s_def), 0)) s_def , 
+    max(COALESCE((st.s_wrist), 0)) s_wrist , 
+    max(COALESCE((st.s_snap), 0))  s_snap, 
+    max(COALESCE((st.s_back), 0))  s_back, 
+    max(COALESCE((st.s_tip), 0))  s_tip, 
+    max(COALESCE((st.s_wrap), 0))  s_wrap 			
 
 from nhl_game_stats.skaters s
     left join nhl_game_stats.skaters_misc misc
@@ -719,13 +722,17 @@ from nhl_game_stats.skaters s
      	on s.playername = toi.playername
      	and s.team = toi.team
      	and s.game_date = toi.game_date			
-    left join nhl_game_stats.playerid_xwalk pid_xwalk
-        on s.playername = pid_xwalk.nhl_playername   
-        and s.team = pid_xwalk.nhl_team
-        and s.season = pid_xwalk.season
+	join nhl_game_stats."team_abbvs" tabb
+		on s.team = tabb.team
+		and s.season = tabb.season		
+	left join nhl_api.season_rosters sr
+		on sr.playername = s.playername
+		and sr.team = tabb.team_name
+		and sr.season = tabb.season
     where s.game_date >= '%s'
-    group by pid_xwalk.playerid, 
-    s.playername, s.game_date, s.team, s.opponent, s.pos, s.season, s.game_type
+    group by sr.nhl_playerid, sr.ep_playerid, 
+	s.playername, s.game_date, s.team, s.opponent,
+    s.pos, s.season, s.game_type
     order by skater_score desc, game_date desc	
     """%(game_date)
     
@@ -734,18 +741,11 @@ from nhl_game_stats.skaters s
     return (fantasy_s)
 
 
-def goalie_score_by_date(season, game_date): 
+def goalie_score_by_date(game_date): 
     
-    goalie_score = """ 
- 
- select g.playername
- , g.game_date
- , g.team
- , g.opponent
- , g.position 
- , g.season 
- , g.game_type
- 
+    goalie_score = """select sr.nhl_playerid, sr.ep_playerid 
+     , g.playername , g.game_date, g.team, g.opponent
+     , g.position , g.season , g.game_type 
 , sum(
 	g.wins*5 + g.ot_losses*2 + g.sv_pct*10 + g.shots_against*0.1 + 
 	g.shutouts*10 + g.saves*0.5 + g.assists*12 + g.goals*50 + g.game_gaa*(-3)
@@ -764,17 +764,20 @@ def goalie_score_by_date(season, game_date):
 , max(g.assists) assists
 , max(g.goals) goals
 , max(g.pim) pim
-, max(pid_xwalk.playerid) playerid
 
 from nhl_game_stats.goalies g
-left join nhl_game_stats.playerid_xwalk pid_xwalk
-        on g.playername = pid_xwalk.nhl_playername   
-        and g.team = pid_xwalk.nhl_team
-        and g.season = pid_xwalk.season
+	join nhl_game_stats."team_abbvs" tabb
+		on g.team = tabb.team
+		and g.season = tabb.season		
+	left join nhl_api.season_rosters sr
+		on sr.playername = g.playername
+		and sr.team = tabb.team_name
+		and sr.season = tabb.season
 where g.game_date >= '%s' 
-group by pid_xwalk.playerid, g.playername, g.game_date
-    , g.team, g.opponent, g.position, g.season, g.game_type
-    """%(game_date)
+group by sr.nhl_playerid, sr.ep_playerid 
+ , g.playername , g.game_date, g.team, g.opponent
+ , g.position , g.season , g.game_type
+ """%(game_date)
     
     fantasy_g = pd.read_sql_query(goalie_score, con=pg_db.engine)
     return(fantasy_g)
@@ -1181,7 +1184,7 @@ def api_lineups(game_id):
                 then concat(dp.playername, ' (A)')
         	else dp.playername
         	end as playername        
-        , gl.status, gl.pos_abbv, gl.pos_type 
+        , gl.status, gl.pos_abbv, gl.pos_type , gl.player_id
         from nhl_api.game_lineup gl
         join nhl_api.game_ids gid
         	on gl.game_id = gid.game_id
@@ -1203,7 +1206,7 @@ def api_s_lines(game_id):
         , dt.team_name
         ,dp.playername, gl.jersey_num, gl.pos_abbv
         , sl.toi/60 as toi
-        , sl.goals, sl.assists, sl.shots 
+        , sl.goals, sl.assists, sl.shots, dp.player_id
         from nhl_api.skater_lines sl
         join nhl_api.game_lineup gl
         	on sl.game_id = gl.game_id
@@ -1230,6 +1233,7 @@ def api_g_lines(game_id):
         , sl.ev_shots, sl.ev_saves
         , sl.pp_shots, sl.pp_saves
         , sl.sh_shots, sl.sh_saves
+        , dp.player_id
         from nhl_api.goalie_lines sl
         join nhl_api.game_lineup gl
         	on sl.game_id = gl.game_id
@@ -1253,8 +1257,8 @@ def game_events(game_id):
     ev = """select 
         ge.period, ge.per_time_rem
         , dt.team_name, ge.event, pe.action
-        , ge.event_type
-        , dp.playername
+        , ge.event_type, ge.event_id, ge.event_idx
+        , dp.playername, pe.player_id
         , gl.jersey_num, gl.pos_code
         , ge.away_score, ge.home_score
         , ge.x_coord, ge.y_coord
