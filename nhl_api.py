@@ -8,7 +8,7 @@ Created on Wed Jan 12 13:03:05 2022
 import requests
 import json
 import pandas as pd
-from pucknight import pg_db
+from pucknight import pg_db, pn_queries
 import sqlalchemy as db
 from sqlalchemy import create_engine, MetaData, Table
 import psycopg2
@@ -637,8 +637,7 @@ def game_id_db(gid_dict):
 def gameLiveFeed(game_id): 
     api_end = 'https://statsapi.web.nhl.com/api/v1/game/'+game_id+'/feed/live'
     response = requests.get(api_end, params={'format':'json'}) 
-    page = response.json() #two item dict
-    
+    page = response.json() #two item dict    
     
     game_date = page['gameData']['datetime']['dateTime'][:10]
     try:
@@ -648,7 +647,7 @@ def gameLiveFeed(game_id):
     try: 
         game_end = page['gameData']['datetime']['endDateTime'][11:19]
     except:
-        game_end = '00:00:00-5:00'
+        game_end = '00:00:00-5:00'        
     game_status = page['gameData']['status']['detailedState']
     game_pk = page['gamePk']
     try:
@@ -658,6 +657,15 @@ def gameLiveFeed(game_id):
     
     away_team = page['gameData']['teams']['away']['id']
     home_team = page['gameData']['teams']['home']['id']
+    
+    try:
+        datetime_start = page['gameData']['datetime']['dateTime']
+    except: 
+        datetime_start = '00:00:00-0:00' 
+    try: 
+        datetime_end = page['gameData']['datetime']['endDateTime']
+    except:
+        datetime_end = '00:00:00-0:00'    
     
     game_info_row = pd.DataFrame([[game_id, game_date,game_start, game_end, game_status,
                                    game_pk, away_team, home_team]],
@@ -900,7 +908,6 @@ def game_livefeed_db(game_info, officials_df, event_df, plr_df):
             connection.close()
             print('PostgreSQL connection is closed')              
     
-
 
 ### Game-Final Livefeed
 
@@ -1542,5 +1549,93 @@ def games_refresh(game_id_list):
         
     
 
-            
+######################
+######################
+######################
         
+
+def live_events_handling(game_id):
+    sl = pn_queries.api_s_lines(game_id)
+    sl['points'] = sl['goals'] + sl['assists']
+    gl = pn_queries.api_g_lines(game_id)            
+    events = pn_queries.game_events(game_id)
+    
+    fo_w = events[(events['event']=='FACEOFF') & (events['action']=='Winner')]\
+        .drop(columns=['action','event_type'])
+    fo_l = events[(events['event']=='FACEOFF') & (events['action']=='Loser')]\
+        .drop(columns=['action','event_type'])
+    
+    fo_events = fo_w.merge(fo_l[['team_name','event_id','event_idx','playername'
+                                ,'player_id','pos_code']]
+                           , on=['event_id','event_idx']
+                           ,suffixes=['_win','_loss'])
+    
+    ## Give n Take
+    giventake = events[(events['event']=='GIVEAWAY') | (events['event']=='TAKEAWAY')]
+    
+    
+    ## Penalties
+    pen_tk = events[(events['event']=='PENALTY') & (events['action']=='PenaltyOn')]
+    pen_dr= events[(events['event']=='PENALTY') & (events['action']=='DrewBy')]
+    
+    pen_events = pen_tk.merge(pen_dr[['team_name','event_id','event_idx','playername'
+                                ,'player_id','action','pos_code']] 
+                              , on=['event_id','event_idx']
+                              , suffixes=['_pen','_drew'])
+    ## SHOTS ##
+    
+        # SOG
+    shots = events[(events['event']=='SHOT') & (events['action']=='Shooter')]
+    saves = events[(events['event']=='SHOT') & (events['action']=='Goalie')]
+    
+    shots= shots.merge(saves, 
+                       on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                       suffixes=['_shot','_goalie'])
+    
+        # Blocked Shots
+    b_shots = events[(events['event']=='BLOCKED_SHOT') & (events['action']=='Shooter')]
+    b_blocks = events[(events['event']=='BLOCKED_SHOT') & (events['action']=='Blocker')]
+    
+    b_shots = b_shots.merge(b_blocks,
+                       on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                       suffixes=['_shot','_block'])
+    
+        ## Missed Shots
+    m_shots = events[(events['event']=='MISSED_SHOT') & (events['action']=='Shooter')]
+    ms_goalie = events[(events['event']=='MISSED_SHOT') & (events['action']=='Unknown')]
+    
+    m_shots= m_shots.merge(ms_goalie, 
+                       on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                       suffixes=['_shot','_goalie'])
+    
+    
+    ## Goals
+    score = events[(events['event']=='GOAL') & (events['action']=='Scorer')]
+    ass = events[(events['event']=='GOAL') & (events['action']=='Assist')]
+    goal = events[(events['event']=='GOAL') & (events['action']=='Goalie')]
+    
+    goals = score.merge(goal,
+                        on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                        suffixes=['_scorer','_goal'])
+    
+    assists = goals.merge(ass, 
+                          on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                          suffixes = ['_goal','_assist'])
+    
+    ## Hits
+    hitter = events[(events['event']=='HIT') & (events['action']=='Hitter')]
+    hittee = events[(events['event']=='HIT') & (events['action']=='Hittee')]
+    
+    hits = hitter.merge(hittee,
+                        on=['period','per_time_rem','x_coord','y_coord','home_score','away_score', 'event'],
+                        suffixes=['_hit','_hittee'])    
+    
+
+    return(fo_events, giventake, pen_events, shots, b_shots, m_shots,
+           goals, assists, hits)
+
+
+
+
+
+

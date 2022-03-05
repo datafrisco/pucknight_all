@@ -292,7 +292,10 @@ def playerpage(link_dict):
                         row.append(r.get_text(strip=True))
                         link_list=[]
                         for r in tr.find_all('a'):    
-                            link_list.append(r.attrs['href'])
+                            try:
+                                link_list.append(r.attrs['href'])
+                            except:
+                                continue
                     row_data.append(row)
                     row_place = len(row_data)
                     row_links[row_place+header_rows] = link_list        
@@ -315,6 +318,7 @@ def playerpage(link_dict):
             
             full_df = df_rows.join(link_as_df,on=None) #For some reason, new cols return as tuples
             full_df.columns = full_df.columns.map(''.join)
+            full_df = full_df.dropna()
         
             #Customize columns to return
             full_df['org_id'] = full_df['row_0'].apply(lambda x: x.split('/')[4])

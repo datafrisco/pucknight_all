@@ -783,6 +783,105 @@ group by sr.nhl_playerid, sr.ep_playerid
     return(fantasy_g)
 
 
+def nhl_stats_db_check(season, ymd_str):
+
+    db_check_q = """with gms as (
+    select game_date, count(*) tms, count(*)*18 exp_skaters
+    from nhl_game_stats.nhl_games
+    where game_date > '%s'
+    group by game_date
+    
+    ),
+    
+    s as
+    (
+    select game_date, count(*) s_cnt
+    from nhl_game_stats.skaters
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    , 
+    misc as
+    (
+    select game_date, count(*) misc_cnt
+    from nhl_game_stats.skaters_misc
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    	
+    , sat as
+    (
+    select game_date, count(*) sat_cnt
+    from nhl_game_stats.skaters_sat
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    	
+    , fo as
+    (
+    select game_date, count(*) fo_cnt
+    from nhl_game_stats.skaters_faceoffs
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    	
+    , pen as
+    (
+    select game_date, count(*) pen_cnt
+    from nhl_game_stats.skaters_penalties
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    	
+    , pp as
+    (
+    select game_date, count(*) pp_cnt
+    from nhl_game_stats.skaters_pp
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)
+    	
+    , st as
+    (
+    select game_date, count(*) st_cnt
+    from nhl_game_stats.skaters_shottype
+    where season = '%s'
+    group by game_date
+    order by game_date asc
+    	)	
+    	
+    select 
+    gms.game_date
+    , gms.tms, gms.exp_skaters
+    , s_cnt, misc_cnt, sat_cnt, pen_cnt, pp_cnt, st_cnt--, fo_cnt
+    from gms
+    left join s
+    	on gms.game_date = s.game_date
+    left join misc
+    	on gms.game_date = misc.game_date
+    left join sat
+    	on gms.game_date = sat.game_date
+    left join pen
+    	on gms.game_date = pen.game_date
+    left join pp
+    	on gms.game_date = pp.game_date
+    left join st
+    	on gms.game_date = st.game_date
+    left join fo
+    	on gms.game_date = fo.game_date		
+        
+    order by gms.game_date desc
+	"""%(ymd_str, season, season, season, season, season, season, season)
+    
+    db_check = pd.read_sql(db_check_q, con=pg_db.engine)   
+    return(db_check)
+
 ### Season Stats from NHL Game
 
 
@@ -1284,5 +1383,47 @@ def game_events(game_id):
     return(events_df)
     
     
+def all_star_team(fs, fg):
+    
+    fs_totals = fs.groupby(['ep_playerid','playername'])\
+        .agg({'nhl_playerid':'max','position':'max','team':'max'
+              ,'skater_score':['mean','sum'],'game_date':'count'}).reset_index()         
+    fs_totals.columns = ['ep_playerid','playername','nhl_playerid'
+                         ,'position','team','ss_mean','ss_tot','gp']
     
     
+    fg_totals = fg.groupby(['ep_playerid','playername'])\
+        .agg({'nhl_playerid':'max', 'position':'max','team':'max'
+              ,'goalie_score':['mean','sum'],'game_date':'count'}).reset_index()
+    fg_totals.columns = ['ep_playerid','playername','nhl_playerid'
+                         ,'position','team','gs_mean','gs_tot','gp']    
+        
+    as_l = fs_totals[fs_totals['position']=='L'].sort_values(['ss_tot'],ascending=False)\
+        .iloc[:4]\
+    [['playername','team','ss_tot']].reset_index().drop(columns=['index','ss_tot'])
+    as_l.columns = ['Left Wing','LW_Team']
+    
+    as_c = fs_totals[fs_totals['position']=='C'].sort_values(['ss_tot'],ascending=False)\
+        .iloc[:4]\
+    [['playername','team','ss_tot']].reset_index().drop(columns=['index','ss_tot'])
+    as_c.columns = ['Center','C_Team']
+    
+    as_r = fs_totals[fs_totals['position']=='R'].sort_values(['ss_tot'],ascending=False)\
+        .iloc[:4]\
+    [['playername','team','ss_tot']].reset_index().drop(columns=['index','ss_tot'])
+    as_r.columns = ['Right Wing','RW_Team']
+    
+    as_d = fs_totals[fs_totals['position']=='D'].sort_values(['ss_tot'],ascending=False)\
+        .iloc[:6]\
+    [['playername','team','ss_tot']].reset_index().drop(columns=['index','ss_tot'])
+    as_d.columns = ['Defense','D_Team']
+    
+    as_g = fg_totals.sort_values(['gs_tot'],ascending=False)\
+        .iloc[:2]\
+    [['playername','team','gs_tot']].reset_index().drop(columns=['index','gs_tot'])
+    as_g.columns = ['Goalies','G_Team']
+    
+    as_team = pd.concat([as_l, as_c, as_r, as_d, as_g], axis=1, join='outer').fillna('-')
+        
+    return(as_team)
+
