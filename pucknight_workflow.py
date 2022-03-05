@@ -21,11 +21,10 @@ import numpy as np
 # DAILY REFRESH
 ################################################
 all_leagues= [
-                # 'NHL'
-                 'KHL'
+                'NHL'
+                , 'KHL'
                 ,'SHL', 'Liiga'
-                , 'Champions HL'
-                , 'OG'
+                # , 'Champions HL', 'OG'
                 , 'DEL',  'HockeyAllsvenskan', 'NL', 'AHL'
                 , 'Czech', 'Slovakia' 
                 ,  'WHL', 'OHL', 'QMJHL'
@@ -34,12 +33,12 @@ all_leagues= [
                 , 'AJHL', 'BCHL','MJAHL','SIJHL','SJHL','CCHL'
                 , 'NOJHL', 'OJHL', 'MJAHL','QJHL'
                 , 'USHL', 'NAHL'
-                , 'NCDC', 'USPHL Premier', 'USPHL Elite'
-                , '18U AAA', '16U AAA'
-                , 'AYHL 18U', 'AYHL 16U', 'AYHL 15U', 'AYHL 14U'
-                , 'NAPHL 18U','NAPHL 16U', 'NAPHL 15U', 'NAPHL 14U'
-                , 'AEHL U18', 'AEHL U15'
-                , 'CSSHL U16', 'CSSHL U15'
+                # , 'NCDC', 'USPHL Premier', 'USPHL Elite'
+                # , '18U AAA', '16U AAA'
+                # , 'AYHL 18U', 'AYHL 16U', 'AYHL 15U', 'AYHL 14U'
+                # , 'NAPHL 18U','NAPHL 16U', 'NAPHL 15U', 'NAPHL 14U'
+                # , 'AEHL U18', 'AEHL U15'
+                # , 'CSSHL U16', 'CSSHL U15'
                  ]
 
 for al in all_leagues:     
@@ -48,7 +47,7 @@ for al in all_leagues:
     print("refresh complete for " + al)
     
 # pg_db.league_level_refresh('WC','2020-21')    
-# pg_db.league_quick_refresh('OG', '2021-22')
+pg_db.league_quick_refresh('NHL', '2021-22')
 # pg_db.league_full_refresh('FPHL', '2021-22')
 
 
@@ -88,7 +87,7 @@ for pid in pids_needed:
 games_df = pn_queries.api_games(season=szn, game_type='Regular Season')
 ### Games Today
 ## Search Games by Date Range
-gd = datetime.date(2022, 2, 22)
+gd = datetime.date(2022, 3, 2)
 gms_day = games_df[(games_df.game_date <= gd)
           & (games_df.game_status != 'Final') 
          ]\
@@ -102,12 +101,15 @@ games_df = pn_queries.api_games(season=szn, game_type='Regular Season')
 ################################################
 
 # Player Stats Updated Through:
-pd.read_sql_query('select max(game_date) from nhl_game_stats.skaters_misc', con=pg_db.engine).iloc[0]
+db_check = pn_queries.nhl_stats_db_check('2021-22', '2022-01-01')
+db_check[['game_date','exp_skaters','s_cnt','misc_cnt','sat_cnt',
+                        'pen_cnt','pp_cnt']].iloc[:10]
+
 
 ################################################
 ### NHL Game Stats 
-sd = '2022-02-16'
-ed = '2022-02-21'
+sd = '2022-02-28'
+ed = '2022-02-28'
 
 
 nhl_games = nhl_sel.nhl_game_results(sd, ed)

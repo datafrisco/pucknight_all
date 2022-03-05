@@ -312,6 +312,7 @@ db_check.iloc[:10][['game_date','exp_skaters','s_cnt','misc_cnt','sat_cnt',
                     'pen_cnt','pp_cnt']]
 
 db_check.columns
+
 #######################################
 #### NHL PlayerID Crosswalk Update ####
 #######################################
@@ -650,38 +651,6 @@ nhl_api.games_refresh(null_game_ids[:])
 # nhl_api.games_refresh(game_id_df)
 
 
-
-### SHIFTS
-game_id = 2021020510
-shift_api_end = 'https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId='+str(game_id)
-response = requests.get(shift_api_end, params={'format':'json'}) 
-page = response.json() #two item dict
-
-shift_df = pd.DataFrame()
-for i in range(len(page['data'])):
-    data_id = page['data'][i]['id']
-    detail_code = page['data'][i]['detailCode']
-    duration = page['data'][i]['duration']
-    end_time = page['data'][i]['endTime']
-    event_description = page['data'][i]['eventDescription']
-    event_details = page['data'][i]['eventDetails']
-    event_num = page['data'][i]['eventNumber']
-    game_id = page['data'][i]['gameId']
-    period = page['data'][i]['period']
-    player_id = page['data'][i]['playerId']
-    shift_num = page['data'][i]['shiftNumber']
-    start_time = page['data'][i]['startTime']
-    team_id = page['data'][i]['teamId']
-    type_code = page['data'][i]['typeCode']
-    
-    shift_row = pd.DataFrame([[data_id, detail_code, game_id, player_id, team_id,
-                               period, shift_num, start_time, end_time, duration,
-                               type_code, event_num, event_details, event_description]],
-                             columns = ['data_id', 'detail_code','game_id','player_id',
-                                        'team_id','period','shift_num','start_time',
-                                        'end_time','duration','type_code','event_id',
-                                        'event_details','event_description'])
-    shift_df = pd.concat([shift_df, shift_row])
 
 
 ##### Check the API request for a game_id

@@ -14,26 +14,25 @@ import pandas as pd
 league = 'NHL'
 season = '2021-22'
 stats_date = '2021-10-01'
-gd1 = datetime.date(2022, 2, 21)
-gd2 = datetime.date(2022, 2, 22)
-gd_adj = datetime.date(2022, 2, 21)
+gd1 = datetime.date(2022, 2, 27)
+gd2 = datetime.date(2022, 3, 1)
+gd_adj = datetime.date(2022, 2, 27)
 
 stand = pn_queries.league_standings(league,season)
 stats = pn_queries.league_scoring(league, season)
 goalies = pn_queries.league_goalies(league, season)
-
 fantasy_s = pn_queries.skater_score_by_date(stats_date)
 fantasy_g = pn_queries.goalie_score_by_date(stats_date)
-
 fs_totals = fantasy_s.groupby(['ep_playerid','playername'])\
-    .agg({'nhl_playerid':'max','skater_score':['mean','sum'],'game_date':'count'}).reset_index()
-fs_totals.iloc[12]    
-fs_totals.columns = ['ep_playerid','playername','nhl_playerid','ss_mean','ss_tot','gp']
+    .agg({'nhl_playerid':'max','position':'max','team':'max'
+          ,'skater_score':['mean','sum'],'game_date':'count'}).\
+        reset_index()         
+fs_totals.columns = ['ep_playerid','playername','nhl_playerid'
+                     ,'position','team','ss_mean','ss_tot','gp']
 fg_totals = fantasy_g.groupby(['ep_playerid','playername'])\
     .agg({'nhl_playerid':'max','goalie_score':['mean','sum'],'game_date':'count'}).reset_index()
 fg_totals.columns = ['ep_playerid','playername','nhl_playerid','gs_mean','gs_tot','gp']
-
-games_df = pn_queries.api_games(season=szn, game_type='Regular Season')
+games_df = pn_queries.api_games(season=season, game_type='Regular Season')
 
 # games_df.columns
 ### Games Today
@@ -43,22 +42,21 @@ gms_day = games_df[(games_df.game_date >= gd1)
          ]\
     [['game_id','game_date','home_team','away_team','game_status']]
 
-# ## Refresh all Today's Games
-# nhl_api.games_refresh(list(gms_day.game_id))
-# games_df = pn_queries.api_games(season=szn, game_type='Regular Season')
+## Refresh all Today's Games
+nhl_api.games_refresh(list(gms_day.game_id))
+games_df = pn_queries.api_games(season=szn, game_type='Regular Season')
 
-# ### IDs of Games to Get ###
-# games_ip = games_df[(games_df.game_status != 'Final') 
-#                           & (games_df.game_status != 'Scheduled') 
-#                           ]\
-#     [['game_id','game_date','home_team','away_team','game_status']]
-# games_ip
+### IDs of Games to Get ###
+games_ip = games_df[(games_df.game_status != 'Final') 
+                          & (games_df.game_status != 'Scheduled') ]\
+    [['game_id','game_date','home_team','away_team','game_status']]
+games_ip
 
-# nhl_api.games_refresh(list(games_ip.game_id))
+nhl_api.games_refresh(list(games_ip.game_id))
 
 
-# games_df[(games_df['home_team']=='Senators')&(games_df['away_team']=='Devils')]\
-#     [['game_id','game_date','away_team','game_status']]
+games_df[(games_df['home_team']=='Senators')&(games_df['away_team']=='Devils')]\
+    [['game_id','game_date','away_team','game_status']]
 
 gms_d = {}
 
@@ -66,7 +64,24 @@ for gid in list(gms_dday.game_id):
         
     game_id = gid
 
-game_id = 2021020648    
+game_id = 2021020814    
+
+### ### ### ### ### ### ### ### ### ### ### ###
+
+schedule_lineups = pd.DataFrame()
+for gid in gms_day.game_id: 
+    gm_lineup = pn_queries.api_lineups(gid)
+    schedule_lineups = pd.concat([schedule_lineups,gm_lineup])
+
+schedule_lineups.iloc[12]
+
+### ### ### ### ### ### ### ### ### ### ### ###
+
+### Events Handling Functions ###
+fo_events, giventake, pen_events, shots, b_shots, m_shots,goals, assists,hits\
+    = nhl_api.live_events_handling(game_id)
+
+### ### ### ### ### ### ### ### ### ### ### ###
 
 games_df[games_df['game_id']==game_id]\
     [['game_date','home_team','home_score','away_team','away_score','venue','period','game_status']].iloc[0]
@@ -136,7 +151,6 @@ pl_awards = fs_lineup_awards.append(fg_lineup_awards)
 
 events = pn_queries.game_events(game_id)
 # event_types = list(set(events.event))
-
 
 
 lineups = pn_queries.api_lineups(game_id)
